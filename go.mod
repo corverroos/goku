@@ -8,5 +8,6 @@ require (
 	github.com/golang/protobuf v1.3.2
 	github.com/luno/jettison v0.0.0-20200903122533-19ed5345d220
 	github.com/luno/reflex v0.0.0-20200901152915-49bb379a4d1e
+	github.com/stretchr/testify v1.6.0
 	google.golang.org/grpc v1.24.0
 )

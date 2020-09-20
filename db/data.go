@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"github.com/corverroos/goku"
 	"github.com/go-sql-driver/mysql"
 	"github.com/luno/jettison/errors"
@@ -13,11 +14,11 @@ import (
 )
 
 func Get(ctx context.Context, dbc dbc, key string) (goku.KV, error) {
-	return lookupWhere(ctx, dbc, "`key`=?", key)
+	return lookupWhere(ctx, dbc, "`key`=? and deleted_ref is null", key)
 }
 
 func List(ctx context.Context, dbc dbc, prefix string) ([]goku.KV, error) {
-	return listWhere(ctx, dbc, "`key` like ?%", prefix)
+	return listWhere(ctx, dbc, "`key` like ? and deleted_ref is null", prefix+"%")
 }
 
 type SetReq struct {
@@ -28,6 +29,10 @@ type SetReq struct {
 }
 
 func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
+	if len(req.Key) == 0 || len(req.Key) >= 256 || strings.Contains(req.Key, "%"){
+		return goku.ErrInvalidKey
+	}
+
 	tx, err := dbc.Begin()
 	if err != nil {
 		return err
@@ -35,7 +40,9 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 	defer tx.Rollback()
 
 	// Step 0: Lookup existing row.
-	var leaseID int64
+	var (
+		leaseID int64
+	)
 	kv, err := lookupWhere(ctx, tx, "`key`=?", req.Key)
 	if errors.Is(err, goku.ErrNotFound) {
 		// No existing key
@@ -71,7 +78,7 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 		}
 	} else {
 		res, err := tx.ExecContext(ctx, "update leases "+
-			"set expires_at=? where id=? and deleted_ref is null", toNullTime(req.ExpiresAt), req.LeaseID)
+			"set expires_at=? where id=? and deleted_ref is null", toNullTime(req.ExpiresAt), leaseID)
 		if err != nil {
 			return err
 		}
@@ -82,7 +89,7 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 			// Ensure it exists and isn't deleted.
 			var i int
 			err = tx.QueryRowContext(ctx, "select count(1) from leases where id=? and deleted_ref is null",
-				req.LeaseID).Scan(&i)
+				leaseID).Scan(&i)
 			if err != nil {
 				return err
 			} else if i == 0 {
@@ -90,6 +97,8 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 			}
 		}
 	}
+
+	fmt.Printf("JCR: req.Value=%s\n", req.Value)
 
 	// Step 3: Update or insert data
 	if kv.Version != 0 {
@@ -103,7 +112,7 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 	} else {
 		err := execOne(ctx, tx, "insert into data "+
 			"set `key`=?, value=?, version=1, created_ref=?, updated_ref=?, lease_id=?",
-			req.Key, kv.Version, ref, ref, leaseID)
+			req.Key, req.Value, ref, ref, leaseID)
 		if err != nil {
 			return err
 		}
@@ -133,6 +142,8 @@ func Delete(ctx context.Context, dbc *sql.DB, key string) error {
 		return err
 	}
 
+	fmt.Printf("JCR: kv.LeaseID=%v\n", kv.LeaseID)
+
 	err = cascadeDeleteLease(ctx, tx, kv.LeaseID, ref)
 	if err != nil {
 		return err
@@ -159,8 +170,8 @@ func insertEvent(ctx context.Context, tx *sql.Tx, key string, typ reflex.EventTy
 
 func cascadeDeleteLease(ctx context.Context, tx *sql.Tx, leaseID int64, ref int64) (error) {
 	err := execOne(ctx, tx,"update leases "+
-		"set deleted_ref=?, expires_at=null where id=? and deleted_ref=null",
-		leaseID, ref)
+		"set deleted_ref=?, expires_at=null where id=? and deleted_ref is null",
+		ref, leaseID)
 	if err != nil {
 		return err
 	}
