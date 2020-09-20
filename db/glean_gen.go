@@ -7,7 +7,7 @@ import (
 	"github.com/luno/jettison/errors"
 )
 
-const cols = " `key`, `value`, `version`, `created_ref`, `updated_ref`, `deleted_ref` "
+const cols = " `key`, `value`, `version`, `created_ref`, `updated_ref`, `deleted_ref`, `lease_id` "
 const selectPrefix = "select " + cols + " from data where "
 
 // lookupWhere queries the data table with the provided where clause, then scans
@@ -41,7 +41,7 @@ func listWhere(ctx context.Context, dbc dbc, where string, args ...interface{}) 
 func scan(row row) (goku.KV, error) {
 	var g glean
 
-	err := row.Scan(&g.Key, &g.Value, &g.Version, &g.CreatedRef, &g.UpdatedRef, &g.DeletedRef)
+	err := row.Scan(&g.Key, &g.Value, &g.Version, &g.CreatedRef, &g.UpdatedRef, &g.DeletedRef, &g.LeaseID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return goku.KV{}, errors.Wrap(goku.ErrNotFound, "")
 	} else if err != nil {
@@ -55,12 +55,14 @@ func scan(row row) (goku.KV, error) {
 		CreatedRef: g.CreatedRef,
 		UpdatedRef: g.UpdatedRef,
 		DeletedRef: g.DeletedRef.Int64,
+		LeaseID: g.LeaseID.Int64,
 	}, nil
 }
 
 // dbc is a common interface for *sql.DB and *sql.Tx.
 type dbc interface {
 	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
 	QueryRowContext(context.Context, string, ...interface{}) *sql.Row
 }
 

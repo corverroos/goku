@@ -1,8 +1,10 @@
 syntax = "proto3";
 
-package kvpb;
+package gokupb;
 
-service KVService {
+import "google/protobuf/timestamp.proto";
+
+service Goku {
   rpc Get(GetRequest) returns (KV) {}
   rpc List(ListRequest) returns (ListResponse) {}
   rpc Set(SetRequest) returns (Empty) {}
@@ -18,6 +20,7 @@ message KV {
     int64 created_ref = 4;
     int64 updated_ref = 5;
     int64 deleted_ref = 6;
+    int64 lease_id = 7;
 }
 
 message GetRequest {
@@ -39,4 +42,6 @@ message DeleteRequest {
 message SetRequest {
   string key = 1;
   bytes value = 2;
+  google.protobuf.Timestamp expires_at = 3;
+  int64 lease_id = 4;
 }

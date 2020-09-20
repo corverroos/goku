@@ -1,4 +1,4 @@
-package kvpb
+package gokupb
 
 import "github.com/corverroos/goku"
 
@@ -10,6 +10,7 @@ func FromProto(in *KV) goku.KV {
 		CreatedRef: in.CreatedRef,
 		UpdatedRef: in.UpdatedRef,
 		DeletedRef: in.DeletedRef,
+		LeaseID: in.LeaseId,
 	}
 }
 
@@ -21,5 +22,6 @@ func ToProto(in goku.KV) *KV {
 		CreatedRef: in.CreatedRef,
 		UpdatedRef: in.UpdatedRef,
 		DeletedRef: in.DeletedRef,
+		LeaseId: in.LeaseID,
 	}
 }

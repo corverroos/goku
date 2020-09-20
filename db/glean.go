@@ -11,4 +11,5 @@ type glean struct {
 	goku.KV
 
 	DeletedRef sql.NullInt64
+	LeaseID sql.NullInt64
 }

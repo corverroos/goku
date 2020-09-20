@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"github.com/corverroos/goku/db"
-	pb "github.com/corverroos/goku/kvpb"
-
+	pb "github.com/corverroos/goku/gokupb"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/luno/reflex"
 )
 
-var _ pb.KVServiceServer = (*Server)(nil)
+var _ pb.GokuServer = (*Server)(nil)
 
 // Server implements the addresses grpc server.
 type Server struct {
@@ -59,7 +59,17 @@ func (s *Server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListRespons
 }
 
 func (s *Server) Set(ctx context.Context, req *pb.SetRequest) (*pb.Empty, error) {
-	return new(pb.Empty), db.Set(ctx, s.wdbc, req.Key, req.Value)
+	expiresAt, err := ptypes.Timestamp(req.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return new(pb.Empty), db.Set(ctx, s.wdbc, db.SetReq{
+		Key:       req.Key,
+		Value:     req.Value,
+		LeaseID:   req.LeaseId,
+		ExpiresAt: expiresAt,
+	})
 }
 
 func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.Empty, error) {

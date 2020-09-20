@@ -6,7 +6,7 @@ import (
 )
 
 type Client interface {
-	Set(ctx context.Context, key string, value []byte) error
+	Set(ctx context.Context, key string, value []byte, opts ...SetOption) error
 	Delete(ctx context.Context, key string) error
 	Get(ctx context.Context, key string) (KV, error)
 	List(ctx context.Context, prefix string) ([]KV, error)
@@ -21,7 +21,9 @@ type KV struct {
 	CreatedRef int64
 	UpdatedRef int64
 	DeletedRef int64
+	LeaseID int64
 }
+
 
 type EventType int
 

@@ -10,10 +10,6 @@ import (
 
 var _ goku.Client = (*Client)(nil)
 
-type Client struct {
-	wdbc, rdbc *sql.DB
-}
-
 func New(wdbc, rdbc *sql.DB) *Client {
 	if rdbc == nil {
 		rdbc = wdbc
@@ -25,8 +21,22 @@ func New(wdbc, rdbc *sql.DB) *Client {
 	}
 }
 
-func (c *Client) Set(ctx context.Context, key string, value []byte) error {
-	return db.Set(ctx, c.wdbc, key, value)
+type Client struct {
+	wdbc, rdbc *sql.DB
+}
+
+func (c *Client) Set(ctx context.Context, key string, value []byte, opts ...goku.SetOption) error {
+	var o goku.SetOptions
+	for _, opt := range opts {
+		opt(&o)
+	}
+
+	return  db.Set(ctx, c.wdbc, db.SetReq{
+		Key:                  key,
+		Value:                value,
+		ExpiresAt:            o.ExpiresAt,
+		LeaseID:              o.LeaseID,
+	})
 }
 
 func (c *Client) Delete(ctx context.Context, key string) error {

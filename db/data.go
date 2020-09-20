@@ -6,8 +6,10 @@ import (
 	"github.com/corverroos/goku"
 	"github.com/go-sql-driver/mysql"
 	"github.com/luno/jettison/errors"
+	"github.com/luno/jettison/j"
 	"github.com/luno/reflex"
 	"strings"
+	"time"
 )
 
 func Get(ctx context.Context, dbc dbc, key string) (goku.KV, error) {
@@ -18,58 +20,96 @@ func List(ctx context.Context, dbc dbc, prefix string) ([]goku.KV, error) {
 	return listWhere(ctx, dbc, "`key` like ?%", prefix)
 }
 
-func Set(ctx context.Context, dbc *sql.DB, key string, value []byte) error {
+type SetReq struct {
+	Key string
+	Value []byte
+	LeaseID int64 // Zero LeaseID creates a new lease.
+	ExpiresAt time.Time // Zero ExpiresAt is infinite
+}
+
+func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 	tx, err := dbc.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	ref, err := insertEvent(ctx, tx, key, goku.EventTypeSet, value)
-	if err != nil {
-		return err
-	}
-
-	// First try to update if already exist
-	res, err := tx.ExecContext(ctx, "update data "+
-		"set value=?, version=version+1, updated_ref=? where `key`=? and updated_ref<?",
-		value, ref, key, ref)
-	if err != nil {
-		return err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	} else if n == 1 {
-		// Row updated.
-		// TODO(corver): Trigger reflex notifier.
-		return tx.Commit()
-	}
-
-	// Update failed; either due to race with another set or because it doesn't exist yet.
-
-	// Try to insert.
-
-	res, err = tx.ExecContext(ctx, "insert into data "+
-		"set `key`=?, value=?, version=1, created_ref=?, updated_ref=?",
-		key, value, ref, ref)
-	if isDuplicateKeyErr(err) {
-		// So key already exists and update failed due to race.
-		return errors.Wrap(goku.ErrSetRace, "")
+	// Step 0: Lookup existing row.
+	var leaseID int64
+	kv, err := lookupWhere(ctx, tx, "`key`=?", req.Key)
+	if errors.Is(err, goku.ErrNotFound) {
+		// No existing key
 	} else if err != nil {
 		return err
+	} else if kv.DeletedRef != 0 {
+		// Create a new lease if deleted
+	} else {
+		leaseID = kv.LeaseID
 	}
 
-	n, err = res.RowsAffected()
+	// Maybe override with requested lease.
+	if req.LeaseID != 0 {
+		leaseID = req.LeaseID
+	}
+
+	// Step1: Insert event
+	ref, err := insertEvent(ctx, tx, req.Key, goku.EventTypeSet, req.Value)
 	if err != nil {
 		return err
-	} else if n != 1 {
-		return errors.New("unexpected insert failure")
 	}
 
-	// TODO(corver): Trigger reflex notifier.
-	return tx.Commit()
+	// Step2: Insert or update the lease.
+	if leaseID == 0 {
+		res, err := tx.ExecContext(ctx, "insert into leases "+
+			"set expires_at=?", toNullTime(req.ExpiresAt))
+		if err != nil {
+			return err
+		}
+		leaseID, err = res.LastInsertId()
+		if err != nil {
+			return err
+		}
+	} else {
+		res, err := tx.ExecContext(ctx, "update leases "+
+			"set expires_at=? where id=? and deleted_ref is null", toNullTime(req.ExpiresAt), req.LeaseID)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		} else if n == 0 {
+			// Ensure it exists and isn't deleted.
+			var i int
+			err = tx.QueryRowContext(ctx, "select count(1) from leases where id=? and deleted_ref is null",
+				req.LeaseID).Scan(&i)
+			if err != nil {
+				return err
+			} else if i == 0 {
+				return errors.New("invalid lease id")
+			}
+		}
+	}
 
+	// Step 3: Update or insert data
+	if kv.Version != 0 {
+		err := execOne(ctx, tx, "update data "+
+			"set value=?, version=?+1, updated_ref=?, lease_id=?, deleted_ref=null " +
+			"where `key`=? and version=?",
+			req.Value, kv.Version, ref, leaseID, req.Key, kv.Version)
+		if err != nil {
+			return err
+		}
+	} else {
+		err := execOne(ctx, tx, "insert into data "+
+			"set `key`=?, value=?, version=1, created_ref=?, updated_ref=?, lease_id=?",
+			req.Key, kv.Version, ref, ref, leaseID)
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func Delete(ctx context.Context, dbc *sql.DB, key string) error {
@@ -79,26 +119,23 @@ func Delete(ctx context.Context, dbc *sql.DB, key string) error {
 	}
 	defer tx.Rollback()
 
+	kv, err := lookupWhere(ctx, tx, "`key`=?", key)
+	if err != nil {
+		return err
+	}
+
+	if kv.DeletedRef != 0 {
+		return nil
+	}
+
 	ref, err := insertEvent(ctx, tx, key, goku.EventTypeDelete, nil)
 	if err != nil {
 		return err
 	}
 
-	// First try to update if already exist
-	res, err := tx.ExecContext(ctx, "update data "+
-		"set value=null, version=version+1, updated_ref=?, deleted_ref=? where `key`=? and updated_ref<?",
-		ref, ref, key, ref)
+	err = cascadeDeleteLease(ctx, tx, kv.LeaseID, ref)
 	if err != nil {
 		return err
-	}
-
-	n, err := res.RowsAffected()
-	if err != nil {
-		return err
-	} else if n == 0 {
-		return errors.Wrap(goku.ErrNotFound, "")
-	} else if n != 1 {
-		return errors.New("unexpected update res")
 	}
 
 	// TODO(corver): Trigger reflex notifier.
@@ -117,6 +154,54 @@ func insertEvent(ctx context.Context, tx *sql.Tx, key string, typ reflex.EventTy
 	}
 
 	return id, nil
+}
+
+
+func cascadeDeleteLease(ctx context.Context, tx *sql.Tx, leaseID int64, ref int64) (error) {
+	err := execOne(ctx, tx,"update leases "+
+		"set deleted_ref=?, expires_at=null where id=? and deleted_ref=null",
+		leaseID, ref)
+	if err != nil {
+		return err
+	}
+
+	var expect int64
+	err = tx.QueryRowContext(ctx, "select count(1) from data where lease_id=?", leaseID).Scan(&expect)
+	if err != nil {
+		return err
+	}
+
+	res, err := tx.ExecContext(ctx, "update data "+
+		"set value=null, version=version+1, deleted_ref=?, updated_ref=? where lease_id=? and updated_ref<?",
+		ref, ref, leaseID, ref)
+	if err != nil {
+		return err
+	}
+
+	actual, err := res.RowsAffected()
+	if err != nil {
+		return err
+	} else if expect != actual {
+		return errors.Wrap(goku.ErrUpdateRace, "cascade delete")
+	}
+
+	return nil
+}
+
+func execOne(ctx context.Context, dbc dbc, q string, args ...interface{}) error {
+	res, err := dbc.ExecContext(ctx, q, args...)
+	if err != nil {
+		return err
+	}
+
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	} else if n != 1 {
+		return errors.New("unexpected row count", j.KV("n", n))
+	}
+
+	return nil
 }
 
 const errDupEntry = 1062
@@ -139,3 +224,12 @@ func isDuplicateKeyErr(err error) bool {
 
 	return strings.Contains(me.Message, "key 'PRIMARY'")
 }
+
+func toNullTime(t time.Time) sql.NullTime {
+	return sql.NullTime{
+		Time:  t,
+		Valid: !t.IsZero(),
+	}
+}
+
+
