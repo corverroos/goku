@@ -67,10 +67,12 @@ func (s *Server) Set(ctx context.Context, req *pb.SetRequest) (*pb.Empty, error)
 	}
 
 	return new(pb.Empty), db.Set(ctx, s.wdbc, db.SetReq{
-		Key:       req.Key,
-		Value:     req.Value,
-		LeaseID:   req.LeaseId,
-		ExpiresAt: expiresAt,
+		Key:         req.Key,
+		Value:       req.Value,
+		LeaseID:     req.LeaseId,
+		ExpiresAt:   expiresAt,
+		PrevVersion: req.PrevVersion,
+		CreateOnly:  req.CreateOnly,
 	})
 }
 

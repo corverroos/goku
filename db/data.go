@@ -22,10 +22,14 @@ func List(ctx context.Context, dbc dbc, prefix string) ([]goku.KV, error) {
 }
 
 type SetReq struct {
-	Key       string
-	Value     []byte
-	LeaseID   int64     // Zero LeaseID creates a new lease.
-	ExpiresAt time.Time // Zero ExpiresAt is infinite
+	Key   string
+	Value []byte
+
+	// Options
+	LeaseID     int64     // Zero creates a new lease on create or updates existing on update.
+	ExpiresAt   time.Time // Zero is infinite
+	PrevVersion int64     // Zero ignores check
+	CreateOnly  bool      // Zero ignores check
 }
 
 func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
@@ -52,6 +56,12 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 		// Create a new lease if deleted
 	} else {
 		leaseID = kv.LeaseID
+	}
+
+	if req.CreateOnly && kv.Version > 0 {
+		return errors.Wrap(goku.ErrConditional, "key already created")
+	} else if req.PrevVersion > 0 && kv.Version != req.PrevVersion {
+		return errors.Wrap(goku.ErrConditional, "previous version mismatch")
 	}
 
 	// Maybe override with requested lease.

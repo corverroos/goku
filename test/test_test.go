@@ -246,6 +246,35 @@ func TestSetWithLease(t *testing.T) {
 	assertEvents(t, cl, key3, goku.EventTypeSet, goku.EventTypeDelete)
 }
 
+func TestCreateOnly(t *testing.T) {
+	ctx := context.Background()
+	cl := SetupForTesting(t)
+
+	const key1 = "key1"
+
+	err := cl.Set(ctx, key1, nil, goku.WithCreateOnly())
+	require.NoError(t, err)
+
+	err = cl.Set(ctx, key1, nil, goku.WithCreateOnly())
+	jtest.Require(t, goku.ErrConditional, err)
+}
+
+func TestPrevVersion(t *testing.T) {
+	ctx := context.Background()
+	cl := SetupForTesting(t)
+
+	const key1 = "key1"
+
+	err := cl.Set(ctx, key1, nil)
+	require.NoError(t, err)
+
+	err = cl.Set(ctx, key1, nil, goku.WithPrevVersion(1))
+	require.NoError(t, err)
+
+	err = cl.Set(ctx, key1, nil, goku.WithPrevVersion(1))
+	jtest.Require(t, goku.ErrConditional, err)
+}
+
 func assertEvents(t *testing.T, cl goku.Client, prefix string, types ...reflex.EventType) {
 	t.Helper()
 

@@ -34,10 +34,12 @@ func (c *Client) Set(ctx context.Context, key string, value []byte, opts ...goku
 	}
 
 	return db.Set(ctx, c.wdbc, db.SetReq{
-		Key:       key,
-		Value:     value,
-		ExpiresAt: o.ExpiresAt,
-		LeaseID:   o.LeaseID,
+		Key:         key,
+		Value:       value,
+		ExpiresAt:   o.ExpiresAt,
+		LeaseID:     o.LeaseID,
+		PrevVersion: o.PrevVersion,
+		CreateOnly:  o.CreateOnly,
 	})
 }
 

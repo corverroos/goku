@@ -44,8 +44,12 @@ message DeleteRequest {
 message SetRequest {
   string key = 1;
   bytes value = 2;
+
+  // Options
   google.protobuf.Timestamp expires_at = 3;
   int64 lease_id = 4;
+  int64 prev_version = 5;
+  bool create_only = 6;
 }
 
 message StreamRequest {

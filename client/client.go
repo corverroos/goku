@@ -32,10 +32,12 @@ func (c Client) Set(ctx context.Context, key string, value []byte, opts ...goku.
 	}
 
 	_, err = c.clpb.Set(ctx, &pb.SetRequest{
-		Key:       key,
-		Value:     value,
-		ExpiresAt: expiresAt,
-		LeaseId:   o.LeaseID,
+		Key:         key,
+		Value:       value,
+		ExpiresAt:   expiresAt,
+		LeaseId:     o.LeaseID,
+		PrevVersion: o.PrevVersion,
+		CreateOnly:  o.CreateOnly,
 	})
 
 	return err
