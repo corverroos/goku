@@ -1,0 +1,42 @@
+syntax = "proto3";
+
+package kvpb;
+
+service KVService {
+  rpc Get(GetRequest) returns (KV) {}
+  rpc List(ListRequest) returns (ListResponse) {}
+  rpc Set(SetRequest) returns (Empty) {}
+  rpc Delete(DeleteRequest) returns (Empty) {}
+}
+
+message Empty {}
+
+message KV {
+    string key = 1;
+    bytes value = 2;
+    int64 version = 3;
+    int64 created_ref = 4;
+    int64 updated_ref = 5;
+    int64 deleted_ref = 6;
+}
+
+message GetRequest {
+  string key = 1;
+}
+
+message ListRequest {
+  string prefix = 1;
+}
+
+message ListResponse {
+  repeated KV kvs = 1;
+}
+
+message DeleteRequest {
+  string key = 1;
+}
+
+message SetRequest {
+  string key = 1;
+  bytes value = 2;
+}
