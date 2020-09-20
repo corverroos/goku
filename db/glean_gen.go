@@ -3,7 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
+
 	"github.com/corverroos/goku"
 	"github.com/luno/jettison/errors"
 )
@@ -49,8 +49,6 @@ func scan(row row) (goku.KV, error) {
 		return goku.KV{}, err
 	}
 
-	fmt.Printf("JCR: g.Value=%s\n", g.Value)
-
 	return goku.KV{
 		Key:        g.Key,
 		Value:      g.Value,
@@ -58,7 +56,7 @@ func scan(row row) (goku.KV, error) {
 		CreatedRef: g.CreatedRef,
 		UpdatedRef: g.UpdatedRef,
 		DeletedRef: g.DeletedRef.Int64,
-		LeaseID: g.LeaseID.Int64,
+		LeaseID:    g.LeaseID.Int64,
 	}, nil
 }
 

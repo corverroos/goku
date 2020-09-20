@@ -2,15 +2,17 @@ package client
 
 import (
 	"context"
+
 	"github.com/corverroos/goku"
 	pb "github.com/corverroos/goku/gokupb"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/luno/reflex"
+	"github.com/luno/reflex/reflexpb"
 )
 
 var _ goku.Client = (*Client)(nil)
 
-func New(cl pb.GokuClient) *Client{
+func New(cl pb.GokuClient) *Client {
 	return &Client{clpb: cl}
 }
 
@@ -20,7 +22,7 @@ type Client struct {
 
 func (c Client) Set(ctx context.Context, key string, value []byte, opts ...goku.SetOption) error {
 	var o goku.SetOptions
-	for _, opt := range opts	 {
+	for _, opt := range opts {
 		opt(&o)
 	}
 
@@ -29,11 +31,11 @@ func (c Client) Set(ctx context.Context, key string, value []byte, opts ...goku.
 		return err
 	}
 
-	_, err =  c.clpb.Set(ctx, &pb.SetRequest{
-		Key:                  key,
-		Value:                value,
-		ExpiresAt:            expiresAt,
-		LeaseId:              o.LeaseID,
+	_, err = c.clpb.Set(ctx, &pb.SetRequest{
+		Key:       key,
+		Value:     value,
+		ExpiresAt: expiresAt,
+		LeaseId:   o.LeaseID,
 	})
 
 	return err
@@ -67,7 +69,21 @@ func (c Client) List(ctx context.Context, prefix string) ([]goku.KV, error) {
 	return res, nil
 }
 
-func (c Client) Stream() reflex.StreamFunc {
-	panic("implement me")
-}
+func (c Client) Stream(prefix string) reflex.StreamFunc {
+	return func(ctx context.Context, after string,
+		opts ...reflex.StreamOption) (reflex.StreamClient, error) {
 
+		sFn := reflex.WrapStreamPB(func(ctx context.Context,
+			req *reflexpb.StreamRequest) (reflex.StreamClientPB, error) {
+
+			sreq := &pb.StreamRequest{
+				Prefix: prefix,
+				Req:    req,
+			}
+
+			return c.clpb.Stream(ctx, sreq)
+		})
+
+		return sFn(ctx, after, opts...)
+	}
+}

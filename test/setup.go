@@ -20,6 +20,7 @@ import (
 
 // SetupForTesting starts a goku grpc server and returns a connected client.
 func SetupForTesting(t *testing.T) *client.Client {
+	db.CleanCache(t)
 	dbc := db.ConnectForTesting(t)
 	srv, addr := NewServer(t, dbc)
 

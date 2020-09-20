@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"database/sql"
+	"strings"
+
 	"github.com/corverroos/goku/db"
 	pb "github.com/corverroos/goku/gokupb"
 	"github.com/golang/protobuf/ptypes"
@@ -74,4 +76,36 @@ func (s *Server) Set(ctx context.Context, req *pb.SetRequest) (*pb.Empty, error)
 
 func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.Empty, error) {
 	return new(pb.Empty), db.Delete(ctx, s.wdbc, req.Key)
+}
+
+func (srv *Server) Stream(req *pb.StreamRequest, sspb pb.Goku_StreamServer) error {
+	streamFunc := func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
+		cl, err := db.ToStream(srv.rdbc)(ctx, after, opts...)
+		if err != nil {
+			return nil, err
+		}
+
+		return &prefixFilter{
+			prefix: req.Prefix,
+			cl:     cl,
+		}, nil
+	}
+
+	return srv.rserver.Stream(streamFunc, req.Req, sspb)
+}
+
+type prefixFilter struct {
+	prefix string
+	cl     reflex.StreamClient
+}
+
+func (f *prefixFilter) Recv() (*reflex.Event, error) {
+	for {
+		e, err := f.cl.Recv()
+		if err != nil {
+			return nil, err
+		} else if strings.HasPrefix(e.ForeignID, f.prefix) {
+			return e, nil
+		}
+	}
 }

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package gokupb;
 
+import "github.com/luno/reflex/reflexpb/reflex.proto";
 import "google/protobuf/timestamp.proto";
 
 service Goku {
@@ -9,6 +10,7 @@ service Goku {
   rpc List(ListRequest) returns (ListResponse) {}
   rpc Set(SetRequest) returns (Empty) {}
   rpc Delete(DeleteRequest) returns (Empty) {}
+  rpc Stream(StreamRequest) returns (stream reflexpb.Event) {}
 }
 
 message Empty {}
@@ -44,4 +46,9 @@ message SetRequest {
   bytes value = 2;
   google.protobuf.Timestamp expires_at = 3;
   int64 lease_id = 4;
+}
+
+message StreamRequest {
+  string prefix = 1;
+  reflexpb.StreamRequest req = 2;
 }

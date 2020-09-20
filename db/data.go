@@ -3,14 +3,14 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"strings"
+	"time"
+
 	"github.com/corverroos/goku"
 	"github.com/go-sql-driver/mysql"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/jettison/j"
 	"github.com/luno/reflex"
-	"strings"
-	"time"
 )
 
 func Get(ctx context.Context, dbc dbc, key string) (goku.KV, error) {
@@ -22,14 +22,14 @@ func List(ctx context.Context, dbc dbc, prefix string) ([]goku.KV, error) {
 }
 
 type SetReq struct {
-	Key string
-	Value []byte
-	LeaseID int64 // Zero LeaseID creates a new lease.
+	Key       string
+	Value     []byte
+	LeaseID   int64     // Zero LeaseID creates a new lease.
 	ExpiresAt time.Time // Zero ExpiresAt is infinite
 }
 
 func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
-	if len(req.Key) == 0 || len(req.Key) >= 256 || strings.Contains(req.Key, "%"){
+	if len(req.Key) == 0 || len(req.Key) >= 256 || strings.Contains(req.Key, "%") {
 		return goku.ErrInvalidKey
 	}
 
@@ -98,12 +98,10 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 		}
 	}
 
-	fmt.Printf("JCR: req.Value=%s\n", req.Value)
-
 	// Step 3: Update or insert data
 	if kv.Version != 0 {
 		err := execOne(ctx, tx, "update data "+
-			"set value=?, version=?+1, updated_ref=?, lease_id=?, deleted_ref=null " +
+			"set value=?, version=?+1, updated_ref=?, lease_id=?, deleted_ref=null "+
 			"where `key`=? and version=?",
 			req.Value, kv.Version, ref, leaseID, req.Key, kv.Version)
 		if err != nil {
@@ -142,8 +140,6 @@ func Delete(ctx context.Context, dbc *sql.DB, key string) error {
 		return err
 	}
 
-	fmt.Printf("JCR: kv.LeaseID=%v\n", kv.LeaseID)
-
 	err = cascadeDeleteLease(ctx, tx, kv.LeaseID, ref)
 	if err != nil {
 		return err
@@ -167,9 +163,8 @@ func insertEvent(ctx context.Context, tx *sql.Tx, key string, typ reflex.EventTy
 	return id, nil
 }
 
-
-func cascadeDeleteLease(ctx context.Context, tx *sql.Tx, leaseID int64, ref int64) (error) {
-	err := execOne(ctx, tx,"update leases "+
+func cascadeDeleteLease(ctx context.Context, tx *sql.Tx, leaseID int64, ref int64) error {
+	err := execOne(ctx, tx, "update leases "+
 		"set deleted_ref=?, expires_at=null where id=? and deleted_ref is null",
 		ref, leaseID)
 	if err != nil {
@@ -242,5 +237,3 @@ func toNullTime(t time.Time) sql.NullTime {
 		Valid: !t.IsZero(),
 	}
 }
-
-

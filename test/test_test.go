@@ -3,11 +3,13 @@ package test
 import (
 	"context"
 	"fmt"
-	"github.com/corverroos/goku"
-	"github.com/luno/jettison/jtest"
-	"github.com/stretchr/testify/require"
 	"strings"
 	"testing"
+
+	"github.com/corverroos/goku"
+	"github.com/luno/jettison/jtest"
+	"github.com/luno/reflex"
+	"github.com/stretchr/testify/require"
 )
 
 func TestSetup(t *testing.T) {
@@ -20,6 +22,8 @@ func TestEmptyNotFound(t *testing.T) {
 
 	_, err := cl.Get(ctx, "")
 	jtest.Require(t, goku.ErrNotFound, err)
+
+	assertEvents(t, cl, "")
 }
 
 func TestInvalidKey(t *testing.T) {
@@ -31,6 +35,8 @@ func TestInvalidKey(t *testing.T) {
 
 	err = cl.Set(ctx, strings.Repeat("s", 256), nil)
 	jtest.Require(t, goku.ErrInvalidKey, err)
+
+	assertEvents(t, cl, "")
 }
 
 func TestGet(t *testing.T) {
@@ -54,16 +60,20 @@ func TestGet(t *testing.T) {
 	kv, err := cl.Get(ctx, key1)
 	jtest.RequireNil(t, err)
 
-	require.Equal(t, int64(1),kv.Version)
-	require.Equal(t, key1,kv.Key)
-	require.Equal(t, []byte(key1),kv.Value)
+	require.Equal(t, int64(1), kv.Version)
+	require.Equal(t, key1, kv.Key)
+	require.Equal(t, []byte(key1), kv.Value)
 
-kv, err = cl.Get(ctx, key2)
+	kv, err = cl.Get(ctx, key2)
 	jtest.RequireNil(t, err)
 
-	require.Equal(t, int64(1),kv.Version)
-	require.Equal(t, key2,kv.Key)
+	require.Equal(t, int64(1), kv.Version)
+	require.Equal(t, key2, kv.Key)
 	require.Len(t, kv.Value, 0)
+
+	assertEvents(t, cl, "", goku.EventTypeSet, goku.EventTypeSet)
+	assertEvents(t, cl, "key", goku.EventTypeSet, goku.EventTypeSet)
+	assertEvents(t, cl, "key1", goku.EventTypeSet)
 }
 
 func TestList(t *testing.T) {
@@ -72,7 +82,7 @@ func TestList(t *testing.T) {
 
 	const n = 20
 	for i := 0; i < n; i++ {
-		err := cl.Set(ctx, fmt.Sprintf("%d",i), nil)
+		err := cl.Set(ctx, fmt.Sprintf("%d", i), nil)
 		jtest.RequireNil(t, err)
 	}
 
@@ -87,6 +97,13 @@ func TestList(t *testing.T) {
 	require.Equal(t, "1", kvs[0].Key)
 	require.Equal(t, "10", kvs[1].Key)
 	require.Equal(t, "19", kvs[10].Key)
+
+	var expected []reflex.EventType
+	for i := 0; i < 11; i++ {
+		expected = append(expected, goku.EventTypeSet)
+	}
+	assertEvents(t, cl, "1", expected...)
+	assertEvents(t, cl, "10", goku.EventTypeSet)
 }
 
 func TestUpdate(t *testing.T) {
@@ -160,7 +177,9 @@ func TestUpdateDelete(t *testing.T) {
 	jtest.RequireNil(t, err)
 	require.Equal(t, int64(0), kv.DeletedRef)
 	require.Equal(t, int64(1), kv.CreatedRef) // Created ref still 1 and not 4...?
-	require.Equal(t, int64(2), kv.LeaseID) // New LeaseID
+	require.Equal(t, int64(2), kv.LeaseID)    // New LeaseID
+
+	assertEvents(t, cl, "", goku.EventTypeSet, goku.EventTypeSet, goku.EventTypeDelete, goku.EventTypeSet)
 }
 
 func TestSetWithLease(t *testing.T) {
@@ -168,7 +187,6 @@ func TestSetWithLease(t *testing.T) {
 	cl := SetupForTesting(t)
 
 	const (
-
 		key1 = "key1"
 		key2 = "key2"
 		key3 = "key3"
@@ -221,5 +239,25 @@ func TestSetWithLease(t *testing.T) {
 	jtest.Require(t, goku.ErrNotFound, err)
 	_, err = cl.Get(ctx, key3)
 	jtest.Require(t, goku.ErrNotFound, err)
+
+	assertEvents(t, cl, "", goku.EventTypeSet, goku.EventTypeSet,
+		goku.EventTypeSet, goku.EventTypeSet, goku.EventTypeDelete) // mmm, only one delete with key3...
+
+	assertEvents(t, cl, key3, goku.EventTypeSet, goku.EventTypeDelete)
 }
 
+func assertEvents(t *testing.T, cl goku.Client, prefix string, types ...reflex.EventType) {
+	t.Helper()
+
+	sc, err := cl.Stream(prefix)(context.Background(), "", reflex.WithStreamToHead())
+	jtest.RequireNil(t, err)
+
+	for i, typ := range types {
+		e, err := sc.Recv()
+		require.NoError(t, err)
+		require.Equal(t, typ.ReflexType(), e.Type.ReflexType(), "event i=%d", i)
+	}
+
+	_, err = sc.Recv()
+	jtest.Require(t, reflex.ErrHeadReached, err)
+}

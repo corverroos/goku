@@ -2,6 +2,7 @@ package goku
 
 import (
 	"context"
+
 	"github.com/luno/reflex"
 )
 
@@ -10,7 +11,7 @@ type Client interface {
 	Delete(ctx context.Context, key string) error
 	Get(ctx context.Context, key string) (KV, error)
 	List(ctx context.Context, prefix string) ([]KV, error)
-	Stream() reflex.StreamFunc
+	Stream(prefix string) reflex.StreamFunc
 }
 
 type KV struct {
@@ -21,9 +22,8 @@ type KV struct {
 	CreatedRef int64
 	UpdatedRef int64
 	DeletedRef int64
-	LeaseID int64
+	LeaseID    int64
 }
-
 
 type EventType int
 

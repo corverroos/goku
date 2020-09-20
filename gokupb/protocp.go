@@ -10,7 +10,7 @@ func FromProto(in *KV) goku.KV {
 		CreatedRef: in.CreatedRef,
 		UpdatedRef: in.UpdatedRef,
 		DeletedRef: in.DeletedRef,
-		LeaseID: in.LeaseId,
+		LeaseID:    in.LeaseId,
 	}
 }
 
@@ -22,6 +22,6 @@ func ToProto(in goku.KV) *KV {
 		CreatedRef: in.CreatedRef,
 		UpdatedRef: in.UpdatedRef,
 		DeletedRef: in.DeletedRef,
-		LeaseId: in.LeaseID,
+		LeaseId:    in.LeaseID,
 	}
 }

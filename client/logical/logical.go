@@ -3,6 +3,8 @@ package logical
 import (
 	"context"
 	"database/sql"
+	"strings"
+
 	"github.com/corverroos/goku"
 	"github.com/corverroos/goku/db"
 	"github.com/luno/reflex"
@@ -31,11 +33,11 @@ func (c *Client) Set(ctx context.Context, key string, value []byte, opts ...goku
 		opt(&o)
 	}
 
-	return  db.Set(ctx, c.wdbc, db.SetReq{
-		Key:                  key,
-		Value:                value,
-		ExpiresAt:            o.ExpiresAt,
-		LeaseID:              o.LeaseID,
+	return db.Set(ctx, c.wdbc, db.SetReq{
+		Key:       key,
+		Value:     value,
+		ExpiresAt: o.ExpiresAt,
+		LeaseID:   o.LeaseID,
 	})
 }
 
@@ -51,6 +53,32 @@ func (c *Client) List(ctx context.Context, prefix string) ([]goku.KV, error) {
 	return db.List(ctx, c.rdbc, prefix)
 }
 
-func (c *Client) Stream() reflex.StreamFunc {
-	return db.ToStream(c.rdbc)
+func (c *Client) Stream(prefix string) reflex.StreamFunc {
+	return func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
+		cl, err := db.ToStream(c.rdbc)(ctx, after, opts...)
+		if err != nil {
+			return nil, err
+		}
+
+		return &prefixFilter{
+			prefix: prefix,
+			cl:     cl,
+		}, nil
+	}
+}
+
+type prefixFilter struct {
+	prefix string
+	cl     reflex.StreamClient
+}
+
+func (f *prefixFilter) Recv() (*reflex.Event, error) {
+	for {
+		e, err := f.cl.Recv()
+		if err != nil {
+			return nil, err
+		} else if strings.HasPrefix(e.ForeignID, f.prefix) {
+			return e, nil
+		}
+	}
 }

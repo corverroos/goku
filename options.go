@@ -6,7 +6,7 @@ type SetOption func(*SetOptions)
 
 type SetOptions struct {
 	ExpiresAt time.Time
-	LeaseID int64
+	LeaseID   int64
 }
 
 func WithExpiresAt(t time.Time) SetOption {

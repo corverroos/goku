@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+
 	"github.com/corverroos/goku"
 )
 
@@ -11,5 +12,5 @@ type glean struct {
 	goku.KV
 
 	DeletedRef sql.NullInt64
-	LeaseID sql.NullInt64
+	LeaseID    sql.NullInt64
 }
