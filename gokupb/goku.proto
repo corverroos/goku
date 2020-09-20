@@ -11,6 +11,8 @@ service Goku {
   rpc Set(SetRequest) returns (Empty) {}
   rpc Delete(DeleteRequest) returns (Empty) {}
   rpc Stream(StreamRequest) returns (stream reflexpb.Event) {}
+  rpc UpdateLease(UpdateLeaseRequest) returns (Empty) {}
+  rpc ExpireLease(ExpireLeaseRequest) returns (Empty) {}
 }
 
 message Empty {}
@@ -55,4 +57,13 @@ message SetRequest {
 message StreamRequest {
   string prefix = 1;
   reflexpb.StreamRequest req = 2;
+}
+
+message UpdateLeaseRequest {
+  int64 lease_id = 1;
+  google.protobuf.Timestamp expires_at = 2;
+}
+
+message ExpireLeaseRequest {
+  int64 lease_id = 1;
 }

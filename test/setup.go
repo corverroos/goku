@@ -19,7 +19,7 @@ import (
 )
 
 // SetupForTesting starts a goku grpc server and returns a connected client.
-func SetupForTesting(t *testing.T) *client.Client {
+func SetupForTesting(t *testing.T) (*client.Client, *sql.DB) {
 	db.CleanCache(t)
 	dbc := db.ConnectForTesting(t)
 	srv, addr := NewServer(t, dbc)
@@ -52,7 +52,7 @@ func SetupForTesting(t *testing.T) *client.Client {
 		}
 	}
 
-	return cl
+	return cl, dbc
 }
 
 // NewServer starts and returns a goku grpc server and its address.

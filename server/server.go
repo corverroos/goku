@@ -80,9 +80,22 @@ func (s *Server) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.Empty, 
 	return new(pb.Empty), db.Delete(ctx, s.wdbc, req.Key)
 }
 
-func (srv *Server) Stream(req *pb.StreamRequest, sspb pb.Goku_StreamServer) error {
+func (s *Server) UpdateLease(ctx context.Context, req *pb.UpdateLeaseRequest) (*pb.Empty, error) {
+	expiresAt, err := ptypes.Timestamp(req.ExpiresAt)
+	if err != nil {
+		return nil, err
+	}
+
+	return new(pb.Empty), db.UpdateLease(ctx, s.wdbc, req.LeaseId, expiresAt)
+}
+
+func (s *Server) ExpireLease(ctx context.Context, req *pb.ExpireLeaseRequest) (*pb.Empty, error) {
+	return new(pb.Empty), db.ExpireLease(ctx, s.wdbc, req.LeaseId)
+}
+
+func (s *Server) Stream(req *pb.StreamRequest, sspb pb.Goku_StreamServer) error {
 	streamFunc := func(ctx context.Context, after string, opts ...reflex.StreamOption) (reflex.StreamClient, error) {
-		cl, err := db.ToStream(srv.rdbc)(ctx, after, opts...)
+		cl, err := db.ToStream(s.rdbc)(ctx, after, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +106,7 @@ func (srv *Server) Stream(req *pb.StreamRequest, sspb pb.Goku_StreamServer) erro
 		}, nil
 	}
 
-	return srv.rserver.Stream(streamFunc, req.Req, sspb)
+	return s.rserver.Stream(streamFunc, req.Req, sspb)
 }
 
 type prefixFilter struct {

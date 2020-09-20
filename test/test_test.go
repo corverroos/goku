@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/corverroos/goku"
+	"github.com/corverroos/goku/db"
 	"github.com/luno/jettison/jtest"
 	"github.com/luno/reflex"
 	"github.com/stretchr/testify/require"
@@ -18,7 +20,7 @@ func TestSetup(t *testing.T) {
 
 func TestEmptyNotFound(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	_, err := cl.Get(ctx, "")
 	jtest.Require(t, goku.ErrNotFound, err)
@@ -28,7 +30,7 @@ func TestEmptyNotFound(t *testing.T) {
 
 func TestInvalidKey(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	err := cl.Set(ctx, "", nil)
 	jtest.Require(t, goku.ErrInvalidKey, err)
@@ -41,7 +43,7 @@ func TestInvalidKey(t *testing.T) {
 
 func TestGet(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	const (
 		key1 = "key1"
@@ -78,7 +80,7 @@ func TestGet(t *testing.T) {
 
 func TestList(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	const n = 20
 	for i := 0; i < n; i++ {
@@ -108,7 +110,7 @@ func TestList(t *testing.T) {
 
 func TestUpdate(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	const key = "key"
 
@@ -142,7 +144,7 @@ func TestUpdate(t *testing.T) {
 
 func TestUpdateDelete(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	const key = "key"
 
@@ -184,7 +186,7 @@ func TestUpdateDelete(t *testing.T) {
 
 func TestSetWithLease(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	const (
 		key1 = "key1"
@@ -234,21 +236,21 @@ func TestSetWithLease(t *testing.T) {
 	jtest.RequireNil(t, err)
 
 	_, err = cl.Get(ctx, key1)
-	jtest.Require(t, goku.ErrNotFound, err)
+	jtest.RequireNil(t, err)
 	_, err = cl.Get(ctx, key2)
-	jtest.Require(t, goku.ErrNotFound, err)
+	jtest.RequireNil(t, err)
 	_, err = cl.Get(ctx, key3)
 	jtest.Require(t, goku.ErrNotFound, err)
 
 	assertEvents(t, cl, "", goku.EventTypeSet, goku.EventTypeSet,
-		goku.EventTypeSet, goku.EventTypeSet, goku.EventTypeDelete) // mmm, only one delete with key3...
+		goku.EventTypeSet, goku.EventTypeSet, goku.EventTypeDelete)
 
 	assertEvents(t, cl, key3, goku.EventTypeSet, goku.EventTypeDelete)
 }
 
 func TestCreateOnly(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	const key1 = "key1"
 
@@ -261,7 +263,7 @@ func TestCreateOnly(t *testing.T) {
 
 func TestPrevVersion(t *testing.T) {
 	ctx := context.Background()
-	cl := SetupForTesting(t)
+	cl, _ := SetupForTesting(t)
 
 	const key1 = "key1"
 
@@ -275,6 +277,91 @@ func TestPrevVersion(t *testing.T) {
 	jtest.Require(t, goku.ErrConditional, err)
 }
 
+func TestWithExpiresAt(t *testing.T) {
+	ctx := context.Background()
+	cl, dbc := SetupForTesting(t)
+
+	const key = "key"
+
+	t0 := time.Now().Round(time.Millisecond) // Round to avoid discrepancies wrt insert and query
+
+	err := cl.Set(ctx, key, nil)
+	jtest.RequireNil(t, err)
+
+	ll, err := db.ListLeasesToExpire(ctx, dbc, t0)
+	jtest.RequireNil(t, err)
+	require.Empty(t, ll)
+
+	err = cl.Set(ctx, key, nil, goku.WithExpiresAt(t0))
+	jtest.RequireNil(t, err)
+
+	ll, err = db.ListLeasesToExpire(ctx, dbc, t0)
+	jtest.RequireNil(t, err)
+	require.Len(t, ll, 1)
+
+	err = cl.Set(ctx, key, nil, goku.WithExpiresAt(t0.Add(time.Minute)))
+	jtest.RequireNil(t, err)
+
+	ll, err = db.ListLeasesToExpire(ctx, dbc, t0)
+	jtest.RequireNil(t, err)
+	require.Len(t, ll, 0)
+}
+
+func TestUpdateLease(t *testing.T) {
+	ctx := context.Background()
+	cl, dbc := SetupForTesting(t)
+
+	const key = "key"
+
+	t0 := time.Now().Round(time.Millisecond) // Round to avoid discrepancies wrt insert and query
+
+	err := cl.Set(ctx, key, nil)
+	jtest.RequireNil(t, err)
+
+	err = cl.UpdateLease(ctx, 1, t0)
+	jtest.RequireNil(t, err)
+
+	ll, err := db.ListLeasesToExpire(ctx, dbc, t0)
+	jtest.RequireNil(t, err)
+	require.Len(t, ll, 1)
+
+	err = cl.Set(ctx, key, nil, goku.WithExpiresAt(t0.Add(time.Minute)))
+	jtest.RequireNil(t, err)
+
+	ll, err = db.ListLeasesToExpire(ctx, dbc, t0)
+	jtest.RequireNil(t, err)
+	require.Len(t, ll, 0)
+}
+
+func TestExpireLease(t *testing.T) {
+	ctx := context.Background()
+	cl, _ := SetupForTesting(t)
+
+	const key1 = "key1"
+	const key2 = "key2"
+
+	err := cl.Set(ctx, key1, nil)
+	jtest.RequireNil(t, err)
+
+	err = cl.Set(ctx, key2, nil, goku.WithLeaseID(1))
+	jtest.RequireNil(t, err)
+
+	err = cl.ExpireLease(ctx, 1)
+	jtest.RequireNil(t, err)
+
+	_, err = cl.Get(ctx, key1)
+	jtest.Require(t, goku.ErrNotFound, err)
+	err = cl.Delete(ctx, key2)
+	jtest.Require(t, goku.ErrNotFound, err)
+	err = cl.UpdateLease(ctx, 1, time.Now())
+	jtest.Require(t, goku.ErrLeaseNotFound, err)
+
+	assertEvents(t, cl, "", goku.EventTypeSet, goku.EventTypeSet,
+		goku.EventTypeExpire, goku.EventTypeExpire)
+
+	assertEvents(t, cl, key1, goku.EventTypeSet, goku.EventTypeExpire)
+}
+
 func assertEvents(t *testing.T, cl goku.Client, prefix string, types ...reflex.EventType) {
 	t.Helper()
 
@@ -283,7 +370,7 @@ func assertEvents(t *testing.T, cl goku.Client, prefix string, types ...reflex.E
 
 	for i, typ := range types {
 		e, err := sc.Recv()
-		require.NoError(t, err)
+		require.NoError(t, err, "event i=%d", i)
 		require.Equal(t, typ.ReflexType(), e.Type.ReflexType(), "event i=%d", i)
 	}
 

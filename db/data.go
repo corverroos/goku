@@ -9,7 +9,6 @@ import (
 	"github.com/corverroos/goku"
 	"github.com/go-sql-driver/mysql"
 	"github.com/luno/jettison/errors"
-	"github.com/luno/jettison/j"
 	"github.com/luno/reflex"
 )
 
@@ -78,7 +77,7 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 	// Step2: Insert or update the lease.
 	if leaseID == 0 {
 		res, err := tx.ExecContext(ctx, "insert into leases "+
-			"set expires_at=?", toNullTime(req.ExpiresAt))
+			"set version=1, expires_at=?", toNullTime(req.ExpiresAt))
 		if err != nil {
 			return err
 		}
@@ -87,24 +86,9 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 			return err
 		}
 	} else {
-		res, err := tx.ExecContext(ctx, "update leases "+
-			"set expires_at=? where id=? and deleted_ref is null", toNullTime(req.ExpiresAt), leaseID)
+		err := updateLeaseTx(ctx, tx, leaseID, req.ExpiresAt)
 		if err != nil {
 			return err
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return err
-		} else if n == 0 {
-			// Ensure it exists and isn't deleted.
-			var i int
-			err = tx.QueryRowContext(ctx, "select count(1) from leases where id=? and deleted_ref is null",
-				leaseID).Scan(&i)
-			if err != nil {
-				return err
-			} else if i == 0 {
-				return errors.New("invalid lease id")
-			}
 		}
 	}
 
@@ -118,7 +102,7 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 			return err
 		}
 	} else {
-		err := execOne(ctx, tx, "insert into data "+
+		_, err := tx.ExecContext(ctx, "insert into data "+
 			"set `key`=?, value=?, version=1, created_ref=?, updated_ref=?, lease_id=?",
 			req.Key, req.Value, ref, ref, leaseID)
 		if err != nil {
@@ -142,7 +126,7 @@ func Delete(ctx context.Context, dbc *sql.DB, key string) error {
 	}
 
 	if kv.DeletedRef != 0 {
-		return nil
+		return errors.Wrap(goku.ErrNotFound, "")
 	}
 
 	ref, err := insertEvent(ctx, tx, key, goku.EventTypeDelete, nil)
@@ -150,7 +134,10 @@ func Delete(ctx context.Context, dbc *sql.DB, key string) error {
 		return err
 	}
 
-	err = cascadeDeleteLease(ctx, tx, kv.LeaseID, ref)
+	err = execOne(ctx, tx, "update data "+
+		"set value=null, version=?+1, updated_ref=?, deleted_ref=? "+
+		"where `key`=? and version=?",
+		kv.Version, ref, ref, key, kv.Version)
 	if err != nil {
 		return err
 	}
@@ -173,37 +160,6 @@ func insertEvent(ctx context.Context, tx *sql.Tx, key string, typ reflex.EventTy
 	return id, nil
 }
 
-func cascadeDeleteLease(ctx context.Context, tx *sql.Tx, leaseID int64, ref int64) error {
-	err := execOne(ctx, tx, "update leases "+
-		"set deleted_ref=?, expires_at=null where id=? and deleted_ref is null",
-		ref, leaseID)
-	if err != nil {
-		return err
-	}
-
-	var expect int64
-	err = tx.QueryRowContext(ctx, "select count(1) from data where lease_id=?", leaseID).Scan(&expect)
-	if err != nil {
-		return err
-	}
-
-	res, err := tx.ExecContext(ctx, "update data "+
-		"set value=null, version=version+1, deleted_ref=?, updated_ref=? where lease_id=? and updated_ref<?",
-		ref, ref, leaseID, ref)
-	if err != nil {
-		return err
-	}
-
-	actual, err := res.RowsAffected()
-	if err != nil {
-		return err
-	} else if expect != actual {
-		return errors.Wrap(goku.ErrUpdateRace, "cascade delete")
-	}
-
-	return nil
-}
-
 func execOne(ctx context.Context, dbc dbc, q string, args ...interface{}) error {
 	res, err := dbc.ExecContext(ctx, q, args...)
 	if err != nil {
@@ -214,7 +170,7 @@ func execOne(ctx context.Context, dbc dbc, q string, args ...interface{}) error 
 	if err != nil {
 		return err
 	} else if n != 1 {
-		return errors.New("unexpected row count", j.KV("n", n))
+		return errors.Wrap(goku.ErrUpdateRace, "")
 	}
 
 	return nil

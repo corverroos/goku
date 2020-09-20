@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"time"
 
 	"github.com/corverroos/goku"
 	pb "github.com/corverroos/goku/gokupb"
@@ -69,6 +70,26 @@ func (c Client) List(ctx context.Context, prefix string) ([]goku.KV, error) {
 	}
 
 	return res, nil
+}
+
+func (c *Client) UpdateLease(ctx context.Context, leaseID int64, expiresAt time.Time) error {
+	expiresPB, err := ptypes.TimestampProto(expiresAt)
+	if err != nil {
+		return err
+	}
+
+	_, err = c.clpb.UpdateLease(ctx, &pb.UpdateLeaseRequest{
+		LeaseId:   leaseID,
+		ExpiresAt: expiresPB,
+	})
+	return err
+}
+
+func (c *Client) ExpireLease(ctx context.Context, leaseID int64) error {
+	_, err := c.clpb.ExpireLease(ctx, &pb.ExpireLeaseRequest{
+		LeaseId: leaseID,
+	})
+	return err
 }
 
 func (c Client) Stream(prefix string) reflex.StreamFunc {

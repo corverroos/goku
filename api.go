@@ -2,6 +2,7 @@ package goku
 
 import (
 	"context"
+	"time"
 
 	"github.com/luno/reflex"
 )
@@ -11,6 +12,8 @@ type Client interface {
 	Delete(ctx context.Context, key string) error
 	Get(ctx context.Context, key string) (KV, error)
 	List(ctx context.Context, prefix string) ([]KV, error)
+	UpdateLease(ctx context.Context, leaseID int64, expiresAt time.Time) error
+	ExpireLease(ctx context.Context, leaseID int64) error
 	Stream(prefix string) reflex.StreamFunc
 }
 
@@ -35,4 +38,5 @@ const (
 	EventTypeUnknown EventType = 0
 	EventTypeSet     EventType = 1
 	EventTypeDelete  EventType = 2
+	EventTypeExpire  EventType = 2
 )

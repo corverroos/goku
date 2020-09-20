@@ -2,8 +2,9 @@ package db
 
 import (
 	"database/sql"
-	"github.com/corverroos/truss"
 	"testing"
+
+	"github.com/corverroos/truss"
 )
 
 func ConnectForTesting(t *testing.T) *sql.DB {
@@ -29,8 +30,9 @@ func ConnectForTesting(t *testing.T) *sql.DB {
 			");",
 		"create table leases ("+
 			" id bigint not null auto_increment,"+
+			" version bigint not null,"+
 			" expires_at datetime(3),"+
-			" deleted_ref bigint,"+
+			" expired bool not null default false,"+
 			" primary key (id),"+
 			" index expires_at (expires_at)"+
 			");")

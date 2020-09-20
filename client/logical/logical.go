@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"time"
 
 	"github.com/corverroos/goku"
 	"github.com/corverroos/goku/db"
@@ -53,6 +54,14 @@ func (c *Client) Get(ctx context.Context, key string) (goku.KV, error) {
 
 func (c *Client) List(ctx context.Context, prefix string) ([]goku.KV, error) {
 	return db.List(ctx, c.rdbc, prefix)
+}
+
+func (c *Client) UpdateLease(ctx context.Context, leaseID int64, expiresAt time.Time) error {
+	return db.UpdateLease(ctx, c.wdbc, leaseID, expiresAt)
+}
+
+func (c *Client) ExpireLease(ctx context.Context, leaseID int64) error {
+	return db.ExpireLease(ctx, c.wdbc, leaseID)
 }
 
 func (c *Client) Stream(prefix string) reflex.StreamFunc {
