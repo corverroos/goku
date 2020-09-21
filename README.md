@@ -18,11 +18,13 @@ Goku inherits the following features/limitations from mysql:
  - Consistent reads if write succeed.
  - Scalable to hundreds of millions of rows. Depending on value sizes.
 
+See the required schema in `db/schema.sql`.
+
 ## Concepts
 
 - `Key`: A key is any string (0 < len < 255). Applications can define their own key structures; a folder type structure with nesting via "/" is a common pattern. 
 
-- `Value`: A value is any byte slice (0 <= len < 4GB).
+- `Value`: A value is any byte slice (0 <= len < 4MB).
 
 - `Lease`: A lease is associated with one or more key-values which are deleted when the lease expires. Expiry is optional and can be configured via an "expires_at" deadline or by an explicit call to the "ExpireLease" API.
 
@@ -87,4 +89,13 @@ type KV struct {
 }
 ```
 
+## Gotchas
 
+- Data races are possible when updating the same keys or leases concurrently. Goku may return `ErrUpdateRace` in this case. It is safe to just retry the call.
+- Any call to `Set` without `WithExpiresAt` disables the associated lease expiry. Take care to always include `WithExpiresAt` if lease expiry is required.
+- `CreatedRef` is set when the key is inserted into the DB. It is not updated when a key is deleted and then recreated.
+- `db.FillGaps` should be called to ensure reflex gaps are filled.
+
+## TODOs
+
+- Add support for reflex stream notifier for performant streaming.
