@@ -33,10 +33,10 @@ func ExpireLease(ctx context.Context, dbc *sql.DB, leaseID int64) error {
 
 	var leaseVersion int64
 	err = tx.QueryRowContext(ctx, "select version from leases where id=? and expired=false", leaseID).Scan(&leaseVersion)
-	if err != nil {
-		return err
-	} else if leaseVersion == 0 {
+	if errors.Is(err, sql.ErrNoRows) {
 		return errors.Wrap(goku.ErrLeaseNotFound, "")
+	} else if err != nil {
+		return errors.Wrap(err, "select lease version")
 	}
 
 	kvl, err := listWhere(ctx, tx, "lease_id=? and deleted_ref is null", leaseID)
