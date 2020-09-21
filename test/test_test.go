@@ -2,6 +2,7 @@ package test
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"strings"
 	"testing"
@@ -360,6 +361,34 @@ func TestExpireLease(t *testing.T) {
 		goku.EventTypeExpire, goku.EventTypeExpire)
 
 	assertEvents(t, cl, key1, goku.EventTypeSet, goku.EventTypeExpire)
+}
+
+func TestMaxValue(t *testing.T) {
+	ctx := context.Background()
+	cl, _ := SetupForTesting(t)
+
+	size := 1024 * 1024 * 3.9
+	b := make([]byte, int(size))
+	_, err := rand.Read(b)
+	jtest.RequireNil(t, err)
+
+	const key1 = "key1"
+
+	err = cl.Set(ctx, key1, b)
+	jtest.RequireNil(t, err)
+
+	kv, err := cl.Get(ctx, key1)
+	jtest.RequireNil(t, err)
+	require.Equal(t, b, kv.Value)
+
+	// 4MB value + grpc request overhead crosses the 4MB total request size.
+	size = 1024 * 1024 * 4.0
+	b = make([]byte, int(size))
+	_, err = rand.Read(b)
+	jtest.RequireNil(t, err)
+
+	err = cl.Set(ctx, key1, b)
+	require.EqualError(t, err, "grpc status error: rpc error: code = ResourceExhausted desc = grpc: received message larger than max (4194328 vs. 4194304)")
 }
 
 func assertEvents(t *testing.T, cl goku.Client, prefix string, types ...reflex.EventType) {

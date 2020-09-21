@@ -53,7 +53,18 @@ func (c *Client) Get(ctx context.Context, key string) (goku.KV, error) {
 }
 
 func (c *Client) List(ctx context.Context, prefix string) ([]goku.KV, error) {
-	return db.List(ctx, c.rdbc, prefix)
+	var res []goku.KV
+	fn := func(kv goku.KV) error {
+		res = append(res, kv)
+		return nil
+	}
+
+	err := db.List(ctx, c.rdbc, prefix, fn)
+	if err != nil {
+		return nil, err
+	}
+
+	return res, nil
 }
 
 func (c *Client) UpdateLease(ctx context.Context, leaseID int64, expiresAt time.Time) error {

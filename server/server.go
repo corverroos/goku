@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"strings"
 
+	"github.com/corverroos/goku"
 	"github.com/corverroos/goku/db"
 	pb "github.com/corverroos/goku/gokupb"
 	"github.com/golang/protobuf/ptypes"
@@ -44,20 +45,11 @@ func (s *Server) Get(ctx context.Context, req *pb.GetRequest) (*pb.KV, error) {
 	return pb.ToProto(kv), nil
 }
 
-func (s *Server) List(ctx context.Context, req *pb.ListRequest) (*pb.ListResponse, error) {
-	kvl, err := db.List(ctx, s.rdbc, req.Prefix)
-	if err != nil {
-		return nil, err
+func (s *Server) List(req *pb.ListRequest, lspb pb.Goku_ListServer) error {
+	fn := func(kv goku.KV) error {
+		return lspb.Send(pb.ToProto(kv))
 	}
-
-	var res []*pb.KV
-	for _, kv := range kvl {
-		res = append(res, pb.ToProto(kv))
-	}
-
-	return &pb.ListResponse{
-		Kvs: res,
-	}, nil
+	return db.List(lspb.Context(), s.rdbc, req.Prefix, fn)
 }
 
 func (s *Server) Set(ctx context.Context, req *pb.SetRequest) (*pb.Empty, error) {

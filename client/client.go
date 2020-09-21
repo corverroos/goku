@@ -2,11 +2,13 @@ package client
 
 import (
 	"context"
+	"io"
 	"time"
 
 	"github.com/corverroos/goku"
 	pb "github.com/corverroos/goku/gokupb"
 	"github.com/golang/protobuf/ptypes"
+	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/reflexpb"
 )
@@ -59,14 +61,20 @@ func (c Client) Get(ctx context.Context, key string) (goku.KV, error) {
 }
 
 func (c Client) List(ctx context.Context, prefix string) ([]goku.KV, error) {
-	lres, err := c.clpb.List(ctx, &pb.ListRequest{Prefix: prefix})
+	lcl, err := c.clpb.List(ctx, &pb.ListRequest{Prefix: prefix})
 	if err != nil {
 		return nil, err
 	}
 
 	var res []goku.KV
-	for _, kvpb := range lres.Kvs {
-		res = append(res, pb.FromProto(kvpb))
+	for {
+		kv, err := lcl.Recv()
+		if errors.Is(err, io.EOF) {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		res = append(res, pb.FromProto(kv))
 	}
 
 	return res, nil

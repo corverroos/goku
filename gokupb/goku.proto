@@ -7,7 +7,7 @@ import "google/protobuf/timestamp.proto";
 
 service Goku {
   rpc Get(GetRequest) returns (KV) {}
-  rpc List(ListRequest) returns (ListResponse) {}
+  rpc List(ListRequest) returns (stream KV) {}
   rpc Set(SetRequest) returns (Empty) {}
   rpc Delete(DeleteRequest) returns (Empty) {}
   rpc Stream(StreamRequest) returns (stream reflexpb.Event) {}

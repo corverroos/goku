@@ -16,8 +16,8 @@ func Get(ctx context.Context, dbc dbc, key string) (goku.KV, error) {
 	return lookupWhere(ctx, dbc, "`key`=? and deleted_ref is null", key)
 }
 
-func List(ctx context.Context, dbc dbc, prefix string) ([]goku.KV, error) {
-	return listWhere(ctx, dbc, "`key` like ? and deleted_ref is null", prefix+"%")
+func List(ctx context.Context, dbc dbc, prefix string, fn func(goku.KV) error) error {
+	return scanWhere(ctx, dbc, fn, "`key` like ? and deleted_ref is null", prefix+"%")
 }
 
 type SetReq struct {

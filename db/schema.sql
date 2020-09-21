@@ -1,7 +1,7 @@
 -- data stores the mutable key-values
 create table data (
  `key` varchar(255) not null,
- value blob,
+ value mediumblob,
  version bigint not null,
  created_ref bigint not null,
  updated_ref bigint not null,
@@ -18,7 +18,7 @@ create table events (
  type int not null,
  `key` varchar(255) not null,
  timestamp datetime(3) not null,
- metadata blob,
+ metadata mediumblob,
 
  primary key (id)
 );

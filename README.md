@@ -24,7 +24,7 @@ See the required schema in `db/schema.sql`.
 
 - `Key`: A key is any string (0 < len < 255). Applications can define their own key structures; a folder type structure with nesting via "/" is a common pattern. 
 
-- `Value`: A value is any byte slice (0 <= len < 4MB).
+- `Value`: A value is any byte slice. Nil and empty values are supported. The max size is limited by max grpc request size which is 4MB for total message including the key.
 
 - `Lease`: A lease is associated with one or more key-values which are deleted when the lease expires. Expiry is optional and can be configured via an "expires_at" deadline or by an explicit call to the "ExpireLease" API.
 
@@ -60,7 +60,7 @@ type Client interface {
 	// ExpireLease expires the given lease and deletes all key-values associated with it.
 	ExpireLease(ctx context.Context, leaseID int64) error
 
-    // Stream returns a reflex stream function filtering events for keys matching the prefix.
+	// Stream returns a reflex stream function filtering events for keys matching the prefix.
 	Stream(prefix string) reflex.StreamFunc
 }
 

@@ -6,7 +6,7 @@ import (
 	"github.com/corverroos/goku"
 )
 
-//go:generate glean -table=data --err_no_rows=kv.ErrNotFound -raw
+//go:generate glean -table=data --err_no_rows=github.com/corverroos/goku.ErrNotFound -scan -raw
 
 type glean struct {
 	goku.KV
