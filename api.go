@@ -66,5 +66,5 @@ const (
 	EventTypeUnknown EventType = 0
 	EventTypeSet     EventType = 1
 	EventTypeDelete  EventType = 2
-	EventTypeExpire  EventType = 2
+	EventTypeExpire  EventType = 3
 )
