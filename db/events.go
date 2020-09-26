@@ -2,15 +2,17 @@ package db
 
 import (
 	"database/sql"
+	"testing"
+
 	"github.com/luno/reflex"
 	"github.com/luno/reflex/rsql"
-	"testing"
 )
 
 var events = rsql.NewEventsTable("events",
 	rsql.WithEventMetadataField("metadata"),
 	rsql.WithEventTimeField("timestamp"),
-	rsql.WithEventForeignIDField("`key`"))
+	rsql.WithEventForeignIDField("`key`"),
+	rsql.WithEventsInMemNotifier()) // TODO(corver): Provide a way to configure other notifiers.
 
 // ToStream returns a reflex stream for deposit events.
 func ToStream(dbc *sql.DB) reflex.StreamFunc {
