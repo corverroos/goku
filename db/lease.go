@@ -64,6 +64,8 @@ func ExpireLease(ctx context.Context, dbc *sql.DB, leaseID int64) error {
 		}
 	}
 
+	defer notifier.Notify()
+
 	return tx.Commit()
 }
 

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/corverroos/goku"
-	"github.com/go-sql-driver/mysql"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex"
 )
@@ -110,6 +109,8 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 		}
 	}
 
+	defer notifier.Notify()
+
 	return tx.Commit()
 }
 
@@ -142,7 +143,8 @@ func Delete(ctx context.Context, dbc *sql.DB, key string) error {
 		return err
 	}
 
-	// TODO(corver): Trigger reflex notifier.
+	defer notifier.Notify()
+
 	return tx.Commit()
 }
 
@@ -174,27 +176,6 @@ func execOne(ctx context.Context, dbc dbc, q string, args ...interface{}) error 
 	}
 
 	return nil
-}
-
-const errDupEntry = 1062
-
-// IsDuplicateErrForKey returns true if the provided error is a mysql ER_DUP_ENTRY
-// error that conflicts with the specified unique index or primary key.
-func isDuplicateKeyErr(err error) bool {
-	if err == nil {
-		return false
-	}
-
-	me := new(mysql.MySQLError)
-	if !errors.As(err, &me) {
-		return false
-	}
-
-	if me.Number != errDupEntry {
-		return false
-	}
-
-	return strings.Contains(me.Message, "key 'PRIMARY'")
 }
 
 func toNullTime(t time.Time) sql.NullTime {
