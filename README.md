@@ -93,7 +93,7 @@ type KV struct {
 
 - Data races are possible when updating the same keys or leases concurrently. Goku may return `ErrUpdateRace` in this case. It is safe to just retry the call.
 - Any call to `Set` without `WithExpiresAt` disables the associated lease expiry. Take care to always include `WithExpiresAt` if lease expiry is required.
-- `CreatedRef` is set when the key is inserted into the DB. It is not updated when a key is deleted and then recreated.
+- `CreatedRef` is set when the key is inserted into the DB or when it is recreated after is was deleted.
 - `db.FillGaps` should be called to ensure reflex gaps are filled.
 
 ## TODOs

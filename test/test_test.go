@@ -179,8 +179,8 @@ func TestUpdateDelete(t *testing.T) {
 	kv, err := cl.Get(ctx, key)
 	jtest.RequireNil(t, err)
 	require.Equal(t, int64(0), kv.DeletedRef)
-	require.Equal(t, int64(1), kv.CreatedRef) // Created ref still 1 and not 4...?
-	require.Equal(t, int64(2), kv.LeaseID)    // New LeaseID
+	require.Equal(t, int64(4), kv.CreatedRef)
+	require.Equal(t, int64(2), kv.LeaseID) // New LeaseID
 
 	assertEvents(t, cl, "", goku.EventTypeSet, goku.EventTypeSet, goku.EventTypeDelete, goku.EventTypeSet)
 }

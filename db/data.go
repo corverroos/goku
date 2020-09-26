@@ -43,7 +43,8 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 
 	// Step 0: Lookup existing row.
 	var (
-		leaseID int64
+		leaseID   int64
+		createRef int64
 	)
 	kv, err := lookupWhere(ctx, tx, "`key`=?", req.Key)
 	if errors.Is(err, goku.ErrNotFound) {
@@ -51,9 +52,10 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 	} else if err != nil {
 		return err
 	} else if kv.DeletedRef != 0 {
-		// Create a new lease if deleted
+		// Create a new lease and createRef if deleted
 	} else {
 		leaseID = kv.LeaseID
+		createRef = kv.CreatedRef
 	}
 
 	if req.CreateOnly && kv.Version > 0 {
@@ -91,19 +93,24 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 		}
 	}
 
+	// Use event ref if we need to set a new created ref
+	if createRef == 0 {
+		createRef = ref
+	}
+
 	// Step 3: Update or insert data
 	if kv.Version != 0 {
 		err := execOne(ctx, tx, "update data "+
-			"set value=?, version=?+1, updated_ref=?, lease_id=?, deleted_ref=null "+
+			"set value=?, version=?+1, created_ref=?, updated_ref=?, deleted_ref=null, lease_id=? "+
 			"where `key`=? and version=?",
-			req.Value, kv.Version, ref, leaseID, req.Key, kv.Version)
+			req.Value, kv.Version, createRef, ref, leaseID, req.Key, kv.Version)
 		if err != nil {
 			return err
 		}
 	} else {
 		_, err := tx.ExecContext(ctx, "insert into data "+
 			"set `key`=?, value=?, version=1, created_ref=?, updated_ref=?, lease_id=?",
-			req.Key, req.Value, ref, ref, leaseID)
+			req.Key, req.Value, createRef, ref, leaseID)
 		if err != nil {
 			return err
 		}
