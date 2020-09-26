@@ -391,6 +391,45 @@ func TestMaxValue(t *testing.T) {
 	require.EqualError(t, err, "grpc status error: rpc error: code = ResourceExhausted desc = grpc: received message larger than max (4194328 vs. 4194304)")
 }
 
+func TestStreamNotifier(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cl, _ := SetupForTesting(t)
+
+	sc, err := cl.Stream("")(ctx, "")
+	jtest.RequireNil(t, err)
+
+	ch := make(chan reflex.EventType)
+
+	go func() {
+		for {
+			e, err := sc.Recv()
+			if err != nil && strings.Contains(strings.ToLower(err.Error()), "canceled") {
+				return
+			}
+			jtest.RequireNil(t, err)
+			ch <- e.Type
+		}
+	}()
+
+	err = cl.Set(ctx, "key1", nil)
+	jtest.RequireNil(t, err)
+	require.Equal(t, goku.EventTypeSet.ReflexType(), (<-ch).ReflexType())
+
+	err = cl.Set(ctx, "key2", nil, goku.WithLeaseID(1))
+	jtest.RequireNil(t, err)
+	require.Equal(t, goku.EventTypeSet.ReflexType(), (<-ch).ReflexType())
+
+	err = cl.Delete(ctx, "key1")
+	jtest.RequireNil(t, err)
+	require.Equal(t, goku.EventTypeDelete.ReflexType(), (<-ch).ReflexType())
+
+	err = cl.ExpireLease(ctx, 1)
+	jtest.RequireNil(t, err)
+	require.Equal(t, goku.EventTypeExpire.ReflexType(), (<-ch).ReflexType())
+}
+
 func assertEvents(t *testing.T, cl goku.Client, prefix string, types ...reflex.EventType) {
 	t.Helper()
 
