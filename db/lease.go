@@ -85,24 +85,8 @@ func updateLeaseTx(ctx context.Context, tx *sql.Tx, leaseID int64, expiresAt tim
 	return nil
 }
 
-func ListLeasesToExpire(ctx context.Context, dbc *sql.DB, cutoff time.Time) ([]int64, error) {
-	rows, err := dbc.QueryContext(ctx, "select id from leases where expires_at<=? and expired=false", cutoff)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var ids []int64
-	for rows.Next() {
-		var id int64
-		err := rows.Scan(&id)
-		if err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-
-	return ids, rows.Err()
+func ListLeasesToExpire(ctx context.Context, dbc *sql.DB, cutoff time.Time) ([]Lease, error) {
+	return listLeasesWhere(ctx, dbc, "expires_at <= ?", cutoff)
 }
 
 type Lease struct {
@@ -112,8 +96,9 @@ type Lease struct {
 	Expired   bool
 }
 
-func ListAllLeases(ctx context.Context, dbc *sql.DB) ([]Lease, error) {
-	rows, err := dbc.QueryContext(ctx, "select id, version, expires_at, expired from leases")
+func listLeasesWhere(ctx context.Context, dbc *sql.DB, where string, args ...interface{}) ([]Lease, error) {
+	rows, err := dbc.QueryContext(ctx, "select id, version, expires_at, expired "+
+		"from leases where "+where, args...)
 	if err != nil {
 		return nil, err
 	}
