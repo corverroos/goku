@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/corverroos/goku"
+	"github.com/go-sql-driver/mysql"
 	"github.com/luno/jettison/errors"
 	"github.com/luno/reflex"
 )
@@ -111,7 +112,9 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 		_, err := tx.ExecContext(ctx, "insert into data "+
 			"set `key`=?, value=?, version=1, created_ref=?, updated_ref=?, lease_id=?",
 			req.Key, req.Value, createRef, ref, leaseID)
-		if err != nil {
+		if isDuplicateKeyErr(err) {
+			return goku.ErrUpdateRace
+		} else if err != nil {
 			return err
 		}
 	}
@@ -183,6 +186,23 @@ func execOne(ctx context.Context, dbc dbc, q string, args ...interface{}) error 
 	}
 
 	return nil
+}
+
+const errDupEntry = 1062
+
+// IsDuplicateErrForKey returns true if the provided error is a mysql ER_DUP_ENTRY
+// error that conflicts with the specified unique index or primary key.
+func isDuplicateKeyErr(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	me := new(mysql.MySQLError)
+	if !errors.As(err, &me) {
+		return false
+	}
+
+	return me.Number == errDupEntry
 }
 
 func toNullTime(t time.Time) sql.NullTime {
