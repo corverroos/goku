@@ -59,7 +59,7 @@ func Set(ctx context.Context, dbc *sql.DB, req SetReq) error {
 		createRef = kv.CreatedRef
 	}
 
-	if req.CreateOnly && kv.Version > 0 {
+	if req.CreateOnly && kv.Version > 0 && kv.DeletedRef == 0 {
 		return errors.Wrap(goku.ErrConditional, "key already created")
 	} else if req.PrevVersion > 0 && kv.Version != req.PrevVersion {
 		return errors.Wrap(goku.ErrConditional, "previous version mismatch")
